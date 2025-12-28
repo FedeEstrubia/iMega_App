@@ -10,6 +10,7 @@ import {
   Reservation 
 } from '../types';
 
+// Credenciales de la instancia proporcionada
 const supabaseUrl = 'https://osgknmskwiyzcqrnjvwi.supabase.co';
 const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zZ2tubXNrd2l5emNxcm5qdndpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY4OTIzNjAsImV4cCI6MjA4MjQ2ODM2MH0.WMBGN2QXFoHx5WIHGN-NaeTnPGSr1Mm07XWEIYS3Cuc';
 
@@ -40,34 +41,28 @@ export const Repository = {
 
   // --- PROFILES ---
   async getMyProfile(): Promise<Profile | null> {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
 
-      if (error || !data) {
-        console.log("Perfil no encontrado, creando uno nuevo...");
-        const { data: newProfile, error: insertError } = await supabase.from('profiles').insert({
-          id: user.id,
-          email: user.email,
-          full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
-          points: 0,
-          level: 1,
-          role: 'user'
-        }).select().single();
-        
-        if (insertError) return null;
-        return newProfile as Profile;
-      }
-      return data as Profile;
-    } catch (e) {
-      return null;
+    if (error || !data) {
+      // Si el usuario existe en Auth pero no en Profiles (ej: creado manualmente en Dashboard), lo creamos.
+      const { data: newProfile } = await supabase.from('profiles').insert({
+        id: user.id,
+        email: user.email,
+        full_name: user.user_metadata?.full_name || user.email?.split('@')[0],
+        points: 0,
+        level: 1,
+        role: 'user'
+      }).select().single();
+      return newProfile as Profile;
     }
+    return data as Profile;
   },
 
   async getAllProfiles(): Promise<Profile[]> {
@@ -77,11 +72,10 @@ export const Repository = {
 
   // --- PRODUCTS ---
   async getProducts(): Promise<Product[]> {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('products')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) throw error;
     return (data || []) as Product[];
   },
 
@@ -126,22 +120,15 @@ export const Repository = {
 
   // --- SETTINGS & LEVELS ---
   async getSettings(): Promise<Settings> {
-    try {
-      const { data, error } = await supabase.from('settings').select('*');
-      if (error) throw error;
-      
-      const settingsObj: any = {};
-      data?.forEach(s => {
-        settingsObj[s.key] = s.value;
-      });
-      
-      return {
-        blue_rate: parseFloat(settingsObj.blue_rate || '1300'),
-        whatsapp_number: settingsObj.whatsapp_number || ''
-      };
-    } catch (e) {
-      return { blue_rate: 1300, whatsapp_number: '' };
-    }
+    const { data } = await supabase.from('settings').select('*');
+    const settingsObj: any = {};
+    data?.forEach(s => {
+      settingsObj[s.key] = s.value;
+    });
+    return {
+      blue_rate: parseFloat(settingsObj.blue_rate || '1300'),
+      whatsapp_number: settingsObj.whatsapp_number || ''
+    };
   },
 
   async updateSetting(key: string, value: string) {
